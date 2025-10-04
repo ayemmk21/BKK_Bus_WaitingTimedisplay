@@ -2,6 +2,6 @@
 
 After cloning the repo
 
-install folium
-install streamlit
+install folium\n
+install streamlit\n
 install streamlit-folium
