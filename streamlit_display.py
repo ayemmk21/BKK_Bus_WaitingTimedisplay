@@ -160,15 +160,6 @@ st.markdown("""
 # Title
 st.markdown('<p class="main-header">🚗 Bangkok Traffic Analysis Dashboard</p>', unsafe_allow_html=True)
 
-# Sidebar
-st.sidebar.title("📊 Dashboard Controls")
-st.sidebar.markdown("---")
-
-# Display data loading configuration
-with st.sidebar.expander("⚙️ Data Loading Settings", expanded=False):
-    st.write(f"**Max Rows to Load:** {MAX_ROWS_TO_LOAD:,}")
-    st.write(f"**Sample Size for Charts:** {SAMPLE_SIZE_FOR_DISPLAY:,}")
-    st.caption("These limits help handle large datasets efficiently")
 
 # Auto-load data
 with st.spinner("Loading data..."):
@@ -180,22 +171,6 @@ if traffic_df is not None:
 if congestion_df is not None:
     st.sidebar.success(f"✅ Congestion data loaded: {len(congestion_df):,} rows")
 
-# Optional: Allow manual upload to override auto-loaded data
-st.sidebar.subheader("📁 Manual Upload (Optional)")
-st.sidebar.caption("Upload to override auto-loaded data")
-traffic_file = st.sidebar.file_uploader("Upload Traffic Data (CSV)", type=['csv'], key='traffic_upload')
-congestion_file = st.sidebar.file_uploader("Upload Congestion Zones (CSV)", type=['csv'], key='congestion_upload')
-
-# Override with uploaded files if provided
-if traffic_file is not None:
-    with st.spinner("Processing uploaded traffic data..."):
-        # For uploaded files, also apply row limit
-        traffic_df = pd.read_csv(traffic_file, parse_dates=["timestamp"], nrows=MAX_ROWS_TO_LOAD)
-        st.sidebar.info(f"📤 Using uploaded traffic data ({len(traffic_df):,} rows)")
-
-if congestion_file is not None:
-    congestion_df = pd.read_csv(congestion_file)
-    st.sidebar.info(f"📤 Using uploaded congestion data ({len(congestion_df):,} rows)")
 
 # Check if data is loaded
 if traffic_df is None or congestion_df is None:
@@ -236,55 +211,6 @@ if traffic_df is None or congestion_df is None:
     
     st.stop()
 
-# Display dataset information
-with st.expander("Dataset Information", expanded=False):
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("**Traffic Data**")
-        st.write(f"- Rows: {len(traffic_df):,}")
-        st.write(f"- Columns: {len(traffic_df.columns)}")
-        st.write(f"- Memory: {traffic_df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-        if 'timestamp' in traffic_df.columns:
-            st.write(f"- Date range: {traffic_df['timestamp'].min()} to {traffic_df['timestamp'].max()}")
-    with col2:
-        st.write("**Congestion Data**")
-        st.write(f"- Rows: {len(congestion_df):,}")
-        st.write(f"- Columns: {len(congestion_df.columns)}")
-        st.write(f"- Memory: {congestion_df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-
-# Filters in sidebar
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 Filters")
-
-# Date range filter
-if 'timestamp' in traffic_df.columns:
-    min_date = traffic_df['timestamp'].min().date()
-    max_date = traffic_df['timestamp'].max().date()
-    date_range = st.sidebar.date_input(
-        "Select Date Range",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    # Filter by date
-    if len(date_range) == 2:
-        mask = (traffic_df['timestamp'].dt.date >= date_range[0]) & (traffic_df['timestamp'].dt.date <= date_range[1])
-        traffic_df_filtered = traffic_df[mask]
-    else:
-        traffic_df_filtered = traffic_df
-else:
-    traffic_df_filtered = traffic_df
-
-# Hour filter
-if 'hour' in traffic_df_filtered.columns:
-    hours = sorted(traffic_df_filtered['hour'].unique())
-    selected_hours = st.sidebar.multiselect(
-        "Select Hours",
-        options=hours,
-        default=hours
-    )
-    traffic_df_filtered = traffic_df_filtered[traffic_df_filtered['hour'].isin(selected_hours)]
 
 # Speed threshold
 speed_threshold = st.sidebar.slider(
@@ -315,26 +241,26 @@ with tab1:
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("Total Records", f"{len(traffic_df_filtered):,}")
+        st.metric("Total Records", f"{len(traffic_df):,}")
     
     with col2:
-        avg_speed = traffic_df_filtered['speed'].mean()
+        avg_speed = traffic_df['speed'].mean()
         st.metric("Avg Speed", f"{avg_speed:.1f} km/h")
     
     with col3:
-        if 'near_congestion' in traffic_df_filtered.columns:
-            congestion_pct = (traffic_df_filtered['near_congestion'].sum() / len(traffic_df_filtered)) * 100
+        if 'near_congestion' in traffic_df.columns:
+            congestion_pct = (traffic_df['near_congestion'].sum() / len(traffic_df)) * 100
             st.metric("Near Congestion", f"{congestion_pct:.1f}%")
         else:
             st.metric("Near Congestion", "N/A")
     
     with col4:
-        slow_traffic = (traffic_df_filtered['speed'] < speed_threshold).sum()
-        slow_pct = (slow_traffic / len(traffic_df_filtered)) * 100
+        slow_traffic = (traffic_df['speed'] < speed_threshold).sum()
+        slow_pct = (slow_traffic / len(traffic_df)) * 100
         st.metric(f"Speed < {speed_threshold} km/h", f"{slow_pct:.1f}%")
     
     with col5:
-        unique_vehicles = traffic_df_filtered['VehicleID'].nunique() if 'VehicleID' in traffic_df_filtered.columns else 'N/A'
+        unique_vehicles = traffic_df['VehicleID'].nunique() if 'VehicleID' in traffic_df.columns else 'N/A'
         st.metric("Unique Vehicles", f"{unique_vehicles:,}" if isinstance(unique_vehicles, int) else unique_vehicles)
     
     st.markdown("---")
@@ -345,7 +271,7 @@ with tab1:
     with col1:
         st.subheader("Speed Distribution")
         fig = px.histogram(
-            traffic_df_filtered, 
+            traffic_df, 
             x='speed', 
             nbins=50,
             title="Traffic Speed Distribution",
@@ -358,8 +284,8 @@ with tab1:
     
     with col2:
         st.subheader("Speed Statistics by Hour")
-        if 'hour' in traffic_df_filtered.columns:
-            hourly_stats = traffic_df_filtered.groupby('hour')['speed'].agg(['mean', 'median', 'std']).reset_index()
+        if 'hour' in traffic_df.columns:
+            hourly_stats = traffic_df.groupby('hour')['speed'].agg(['mean', 'median', 'std']).reset_index()
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=hourly_stats['hour'], y=hourly_stats['mean'], 
                                     mode='lines+markers', name='Mean', line=dict(color='blue')))
@@ -385,8 +311,8 @@ with tab2:
         st.subheader("Traffic Speed Heatmap")
         
         # Sample data for performance
-        sample_size = min(10000, len(traffic_df_filtered))
-        df_sample = traffic_df_filtered.sample(n=sample_size, random_state=42)
+        sample_size = min(10000, len(traffic_df))
+        df_sample = traffic_df.sample(n=sample_size, random_state=42)
         
         # Create map centered on Bangkok
         bangkok_center = [13.7563, 100.5018]
@@ -435,9 +361,9 @@ with tab2:
         )
         
         st.subheader("Speed by Distance from Center")
-        if 'distance_from_center' in traffic_df_filtered.columns:
+        if 'distance_from_center' in traffic_df.columns:
             fig = px.scatter(
-                traffic_df_filtered.sample(n=min(5000, len(traffic_df_filtered))),
+                traffic_df.sample(n=min(5000, len(traffic_df))),
                 x='distance_from_center',
                 y='speed',
                 color='speed',
@@ -457,8 +383,8 @@ with tab3:
     
     with col1:
         st.subheader("Traffic by Hour of Day")
-        if 'hour' in traffic_df_filtered.columns:
-            hourly = traffic_df_filtered.groupby('hour').agg({
+        if 'hour' in traffic_df.columns:
+            hourly = traffic_df.groupby('hour').agg({
                 'speed': ['mean', 'count']
             }).reset_index()
             hourly.columns = ['hour', 'avg_speed', 'count']
@@ -481,9 +407,9 @@ with tab3:
     
     with col2:
         st.subheader("Traffic by Day of Week")
-        if 'day_of_week' in traffic_df_filtered.columns:
+        if 'day_of_week' in traffic_df.columns:
             days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-            daily = traffic_df_filtered.groupby('day_of_week')['speed'].mean().reset_index()
+            daily = traffic_df.groupby('day_of_week')['speed'].mean().reset_index()
             daily['day_name'] = daily['day_of_week'].apply(lambda x: days[x])
             
             fig = px.bar(
@@ -500,26 +426,26 @@ with tab3:
     st.markdown("---")
     
     # Rush hour analysis
-    if 'is_rush_hour' in traffic_df_filtered.columns:
+    if 'is_rush_hour' in traffic_df.columns:
         st.subheader("Rush Hour vs Non-Rush Hour Comparison")
         
         col1, col2, col3 = st.columns(3)
         
-        rush_hour_data = traffic_df_filtered[traffic_df_filtered['is_rush_hour'] == 1]
-        non_rush_data = traffic_df_filtered[traffic_df_filtered['is_rush_hour'] == 0]
+        rush_hour_data = traffic_df[traffic_df['is_rush_hour'] == 1]
+        non_rush_data = traffic_df[traffic_df['is_rush_hour'] == 0]
         
         with col1:
             st.metric(
                 "Rush Hour Avg Speed",
                 f"{rush_hour_data['speed'].mean():.1f} km/h",
-                delta=f"{rush_hour_data['speed'].mean() - traffic_df_filtered['speed'].mean():.1f} km/h"
+                delta=f"{rush_hour_data['speed'].mean() - traffic_df['speed'].mean():.1f} km/h"
             )
         
         with col2:
             st.metric(
                 "Non-Rush Hour Avg Speed",
                 f"{non_rush_data['speed'].mean():.1f} km/h",
-                delta=f"{non_rush_data['speed'].mean() - traffic_df_filtered['speed'].mean():.1f} km/h"
+                delta=f"{non_rush_data['speed'].mean() - traffic_df['speed'].mean():.1f} km/h"
             )
         
         with col3:
@@ -564,11 +490,11 @@ with tab4:
     st.markdown("---")
     
     # Speed comparison near congestion
-    if 'near_congestion' in traffic_df_filtered.columns:
+    if 'near_congestion' in traffic_df.columns:
         st.subheader("Speed Comparison: Near vs Far from Congestion Zones")
         
-        near = traffic_df_filtered[traffic_df_filtered['near_congestion'] == 1]['speed']
-        far = traffic_df_filtered[traffic_df_filtered['near_congestion'] == 0]['speed']
+        near = traffic_df[traffic_df['near_congestion'] == 1]['speed']
+        far = traffic_df[traffic_df['near_congestion'] == 0]['speed']
         
         fig = go.Figure()
         fig.add_trace(go.Box(y=near, name='Near Congestion', marker_color='red'))
@@ -590,10 +516,10 @@ with tab5:
     
     feature_cols = ['hour', 'day_of_week', 'is_weekend', 'is_rush_hour', 
                    'distance_from_center', 'near_congestion', 'distance_to_congestion']
-    available_features = [col for col in feature_cols if col in traffic_df_filtered.columns]
+    available_features = [col for col in feature_cols if col in traffic_df.columns]
     
     if available_features:
-        correlations = traffic_df_filtered[available_features + ['speed']].corr()['speed'].drop('speed').sort_values()
+        correlations = traffic_df[available_features + ['speed']].corr()['speed'].drop('speed').sort_values()
         
         fig = px.bar(
             x=correlations.values,
@@ -622,10 +548,10 @@ with tab5:
     
     with col2:
         st.subheader("Data Quality Metrics")
-        st.metric("Missing Values", f"{traffic_df_filtered.isnull().sum().sum()}")
-        st.metric("Duplicate Records", f"{traffic_df_filtered.duplicated().sum()}")
-        if 'speed' in traffic_df_filtered.columns:
-            st.metric("Speed Outliers (>120 km/h)", f"{(traffic_df_filtered['speed'] > 120).sum()}")
+        st.metric("Missing Values", f"{traffic_df.isnull().sum().sum()}")
+        st.metric("Duplicate Records", f"{traffic_df.duplicated().sum()}")
+        if 'speed' in traffic_df.columns:
+            st.metric("Speed Outliers (>120 km/h)", f"{(traffic_df['speed'] > 120).sum()}")
 
 # ============================================================================
 # TAB 6: ROUTE ANALYSIS
