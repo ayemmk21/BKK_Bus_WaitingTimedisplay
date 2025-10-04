@@ -16,11 +16,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Configuration for large datasets
-MAX_ROWS_TO_LOAD = 100000  # Limit number of rows to load
-SAMPLE_SIZE_FOR_DISPLAY = 10000  # Sample size for visualizations
-CHUNK_SIZE = 50000  # Chunk size for reading large files
-
 # Hugging Face dataset URLs
 HUGGINGFACE_BASE = "https://huggingface.co/datasets/Ayemm/BKK_Bus_Data/resolve/main/"
 
@@ -28,115 +23,150 @@ HUGGINGFACE_BASE = "https://huggingface.co/datasets/Ayemm/BKK_Bus_Data/resolve/m
 TRAFFIC_DATA_URL = HUGGINGFACE_BASE + "traffic.csv"
 CONGESTION_DATA_URL = HUGGINGFACE_BASE + "congestion_zones.csv"
 
-# Alternative/additional data sources
-BUS_ROUTES_URL = HUGGINGFACE_BASE + "bangkok_bus_routes.csv"
+# Additional data files
+BUS_ROUTES_URL = HUGGINGFACE_BASE + "cleaned_bus_routes_file.csv"
 BUS_STOPS_URL = HUGGINGFACE_BASE + "cleaned_bus_stops_file.csv"
 ROUTE_SUMMARY_URL = HUGGINGFACE_BASE + "predicted_route_times_summary.csv"
 
-# Data loading functions with optimization for large files
-@st.cache_data(show_spinner="Loading traffic data...", ttl=3600)
-def load_traffic_from_url(url: str, max_rows: int = MAX_ROWS_TO_LOAD) -> pd.DataFrame | None:
-    """Load traffic data from Hugging Face with row limit"""
+
+# --- Remote data loader with caching ---
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_csv_from_url(url: str, required_cols: list[str] | None = None, parse_dates: list[str] | None = None) -> pd.DataFrame | None:
+    """Load a full CSV file from Hugging Face and validate required columns."""
     if not url:
         return None
     try:
-        st.info(f"📥 Loading traffic data from Hugging Face...")
-        # Load only specified number of rows for large datasets
-        df = pd.read_csv(url, parse_dates=["timestamp"], nrows=max_rows)
-        
-        # Verify required columns exist
-        required_cols = ["lat", "lon", "speed", "timestamp"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        
-        if missing_cols:
-            st.error(f"Missing required columns: {missing_cols}")
-            return None
-        
-        st.success(f"✅ Loaded {len(df):,} rows from traffic.csv")
+        df = pd.read_csv(url, parse_dates=parse_dates)
+        if required_cols:
+            missing = [c for c in required_cols if c not in df.columns]
+            if missing:
+                st.error(f"Missing required columns: {missing} in {os.path.basename(url)}")
+                return None
+        st.success(f"✅ Loaded {len(df):,} rows from {os.path.basename(url)}")
         return df
     except Exception as e:
-        st.error(f"Error loading traffic data: {e}")
+        st.error(f"❌ Error loading {os.path.basename(url)}: {e}")
         return None
 
-@st.cache_data(show_spinner="Loading congestion data...", ttl=3600)
-def load_congestion_from_url(url: str) -> pd.DataFrame | None:
-    """Load congestion data from Hugging Face"""
-    if not url:
-        return None
-    try:
-        st.info(f"📥 Loading congestion zones from Hugging Face...")
-        df = pd.read_csv(url)
-        
-        # Verify required columns exist
-        required_cols = ["center_lat", "center_lon", "severity", "avg_speed"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        
-        if missing_cols:
-            st.error(f"Missing required columns: {missing_cols}")
-            return None
-        
-        st.success(f"✅ Loaded {len(df):,} congestion zones")
-        return df
-    except Exception as e:
-        st.error(f"Error loading congestion data: {e}")
-        return None
 
-@st.cache_data(show_spinner="Loading traffic data from local file...", ttl=3600)
-def load_traffic_local(max_rows: int = MAX_ROWS_TO_LOAD) -> pd.DataFrame | None:
-    """Load traffic data from local file with chunking for large files"""
+# --- Local fallback loaders with caching ---
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_traffic_local() -> pd.DataFrame | None:
+    """Load traffic data from local file as fallback."""
     p = "data/traffic.csv"
     if os.path.exists(p):
         try:
-            # Get file size to determine loading strategy
-            file_size_mb = os.path.getsize(p) / (1024 * 1024)
-            
-            if file_size_mb > 100:  # If file is larger than 100MB
-                st.info(f"📊 Large file detected ({file_size_mb:.1f} MB). Loading optimized sample...")
-                # Load in chunks and sample
-                chunks = []
-                for chunk in pd.read_csv(p, parse_dates=["timestamp"], chunksize=CHUNK_SIZE):
-                    # Sample from each chunk to maintain data distribution
-                    sample_size = min(len(chunk), max_rows // 10)
-                    chunks.append(chunk.sample(n=sample_size, random_state=42))
-                    if sum(len(c) for c in chunks) >= max_rows:
-                        break
-                df = pd.concat(chunks, ignore_index=True)
-            else:
-                # Load normally with row limit
-                df = pd.read_csv(p, parse_dates=["timestamp"], nrows=max_rows)
-            
+            df = pd.read_csv(p, parse_dates=["timestamp"])
+            st.success(f"✅ Loaded {len(df):,} rows from local traffic.csv")
             return df
         except Exception as e:
-            st.error(f"Error loading local traffic data: {e}")
-            return None
+            st.error(f"❌ Error loading local traffic data: {e}")
     return None
 
-@st.cache_data(show_spinner="Loading congestion data from local file...", ttl=3600)
+
+@st.cache_data(show_spinner=False, ttl=3600)
 def load_congestion_local() -> pd.DataFrame | None:
-    """Load congestion data from local file"""
+    """Load congestion data from local file as fallback."""
     p = "data/congestion.csv"
     if os.path.exists(p):
         try:
             df = pd.read_csv(p)
+            st.success(f"✅ Loaded {len(df):,} rows from local congestion.csv")
             return df
         except Exception as e:
-            st.error(f"Error loading local congestion data: {e}")
-            return None
+            st.error(f"❌ Error loading local congestion data: {e}")
     return None
 
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_bus_routes_local() -> pd.DataFrame | None:
+    """Load bus routes data from local file as fallback."""
+    p = "data/bangkok_bus_routes.csv"
+    if os.path.exists(p):
+        try:
+            df = pd.read_csv(p)
+            st.success(f"✅ Loaded {len(df):,} rows from local bangkok_bus_routes.csv")
+            return df
+        except Exception as e:
+            st.error(f"❌ Error loading local bus routes data: {e}")
+    return None
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_bus_stops_local() -> pd.DataFrame | None:
+    """Load bus stops data from local file as fallback."""
+    p = "data/cleaned_bus_stops_file.csv"
+    if os.path.exists(p):
+        try:
+            df = pd.read_csv(p)
+            st.success(f"✅ Loaded {len(df):,} rows from local cleaned_bus_stops_file.csv")
+            return df
+        except Exception as e:
+            st.error(f"❌ Error loading local bus stops data: {e}")
+    return None
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def load_route_summary_local() -> pd.DataFrame | None:
+    """Load route summary data from local file as fallback."""
+    p = "data/predicted_route_times_summary.csv"
+    if os.path.exists(p):
+        try:
+            df = pd.read_csv(p)
+            st.success(f"✅ Loaded {len(df):,} rows from local predicted_route_times_summary.csv")
+            return df
+        except Exception as e:
+            st.error(f"❌ Error loading local route summary data: {e}")
+    return None
+
+
+# --- Main data loader function ---
+
 def load_data():
-    """Load data from URL (priority) or local file (fallback)"""
-    # Try loading traffic data
-    traffic_df = load_traffic_from_url(TRAFFIC_DATA_URL)
+    """
+    Load all required data from Hugging Face, with local file fallback.
+    
+    Returns:
+        tuple: (traffic_df, congestion_df, bus_routes_df, bus_stops_df, route_summary_df)
+    """
+    # Load traffic data (required)
+    traffic_df = load_csv_from_url(
+        TRAFFIC_DATA_URL,
+        required_cols=["lat", "lon", "speed", "timestamp"],
+        parse_dates=["timestamp"]
+    )
     if traffic_df is None:
+        st.warning("⚠️ Failed to load from Hugging Face, trying local fallback...")
         traffic_df = load_traffic_local()
     
-    # Try loading congestion data
-    congestion_df = load_congestion_from_url(CONGESTION_DATA_URL)
+    # Load congestion data (required)
+    congestion_df = load_csv_from_url(
+        CONGESTION_DATA_URL,
+        required_cols=["center_lat", "center_lon", "severity", "avg_speed"]
+    )
     if congestion_df is None:
+        st.warning("⚠️ Failed to load from Hugging Face, trying local fallback...")
         congestion_df = load_congestion_local()
     
-    return traffic_df, congestion_df
+    # Load bus routes data (optional)
+    bus_routes_df = load_csv_from_url(BUS_ROUTES_URL)
+    if bus_routes_df is None:
+        bus_routes_df = load_bus_routes_local()
+    
+    # Load bus stops data (optional)
+    bus_stops_df = load_csv_from_url(BUS_STOPS_URL)
+    if bus_stops_df is None:
+        bus_stops_df = load_bus_stops_local()
+    
+    # Load route summary data (optional)
+    route_summary_df = load_csv_from_url(ROUTE_SUMMARY_URL)
+    if route_summary_df is None:
+        route_summary_df = load_route_summary_local()
+    
+    return traffic_df, congestion_df, bus_routes_df, bus_stops_df, route_summary_df
+
 
 # Custom CSS
 st.markdown("""
@@ -163,13 +193,7 @@ st.markdown('<p class="main-header">🚗 Bangkok Traffic Analysis Dashboard</p>'
 
 # Auto-load data
 with st.spinner("Loading data..."):
-    traffic_df, congestion_df = load_data()
-
-# Show data info if loaded
-if traffic_df is not None:
-    st.sidebar.success(f"✅ Traffic data loaded: {len(traffic_df):,} rows")
-if congestion_df is not None:
-    st.sidebar.success(f"✅ Congestion data loaded: {len(congestion_df):,} rows")
+    traffic_df, congestion_df, bus_routes_df, bus_stops_df, route_summary_df = load_data()
 
 
 # Check if data is loaded
@@ -181,20 +205,15 @@ if traffic_df is None or congestion_df is None:
     - **Congestion Zones:** `congestion_zones.csv` from Hugging Face
     
     **Available files in your dataset:**
-    - bangkok_bus_routes.csv / .xlsx
-    - bus_stop_locations.csv
-    - cleaned_bus_routes_file.csv / .xlsx
-    - cleaned_bus_stops_file.csv / .xlsx
-    - congestion_zones.csv / .xlsx
+    - cleaned_bus_routes_file.csv 
+    - cleaned_bus_stops_file.csv
+    - congestion_zones.csv 
     - traffic.csv
     - predicted_route_times_summary.csv
     
     **Fallback Option:**
     - Create a `data/` folder in your project directory
     - Add `traffic.csv` and `congestion_zones.csv` files locally
-    
-    **Manual Upload:**
-    - Use the sidebar file uploaders
     
     **Note:** For large datasets, the app automatically:
     - Loads only the first {MAX_ROWS_TO_LOAD:,} rows
@@ -211,15 +230,6 @@ if traffic_df is None or congestion_df is None:
     
     st.stop()
 
-
-# Speed threshold
-speed_threshold = st.sidebar.slider(
-    "Speed Threshold (km/h)",
-    min_value=0,
-    max_value=120,
-    value=30,
-    step=5
-)
 
 # Main content
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -238,7 +248,7 @@ with tab1:
     st.header("Overview Statistics")
     
     # Key metrics
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Total Records", f"{len(traffic_df):,}")
@@ -254,12 +264,12 @@ with tab1:
         else:
             st.metric("Near Congestion", "N/A")
     
-    with col4:
-        slow_traffic = (traffic_df['speed'] < speed_threshold).sum()
-        slow_pct = (slow_traffic / len(traffic_df)) * 100
-        st.metric(f"Speed < {speed_threshold} km/h", f"{slow_pct:.1f}%")
+    #with col4:
+        #slow_traffic = (traffic_df['speed'] < speed_threshold).sum()
+        #slow_pct = (slow_traffic / len(traffic_df)) * 100
+        #st.metric(f"Speed < {speed_threshold} km/h", f"{slow_pct:.1f}%")
     
-    with col5:
+    with col4:
         unique_vehicles = traffic_df['VehicleID'].nunique() if 'VehicleID' in traffic_df.columns else 'N/A'
         st.metric("Unique Vehicles", f"{unique_vehicles:,}" if isinstance(unique_vehicles, int) else unique_vehicles)
     
@@ -278,8 +288,8 @@ with tab1:
             labels={'speed': 'Speed (km/h)', 'count': 'Frequency'},
             color_discrete_sequence=['#1f77b4']
         )
-        fig.add_vline(x=speed_threshold, line_dash="dash", line_color="red", 
-                     annotation_text=f"Threshold: {speed_threshold} km/h")
+        #fig.add_vline(x=speed_threshold, line_dash="dash", line_color="red", 
+                    #annotation_text=f"Threshold: {speed_threshold} km/h")
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
