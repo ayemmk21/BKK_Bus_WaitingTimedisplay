@@ -1,3 +1,5 @@
+#first piece of code
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,10 +13,12 @@ import os
 # Page configuration
 st.set_page_config(
     page_title="Bangkok Traffic Analysis",
-    page_icon="🚗",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+st.title("Traffic Analysis Dashboard")
+st.sidebar.success("Select a page above.")
 
 # Hugging Face dataset URLs
 HUGGINGFACE_BASE = "https://huggingface.co/datasets/Ayemm/BKK_Bus_Data/resolve/main/"
@@ -187,9 +191,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Title
-st.markdown('<p class="main-header">🚗 Bangkok Traffic Analysis Dashboard</p>', unsafe_allow_html=True)
-
 
 # Auto-load data
 with st.spinner("Loading data..."):
@@ -215,10 +216,6 @@ if traffic_df is None or congestion_df is None:
     - Create a `data/` folder in your project directory
     - Add `traffic.csv` and `congestion_zones.csv` files locally
     
-    **Note:** For large datasets, the app automatically:
-    - Loads only the first {MAX_ROWS_TO_LOAD:,} rows
-    - Caches data for 1 hour
-    - Shows loading progress
     """)
     
     st.subheader("Data Source Status")
@@ -232,87 +229,16 @@ if traffic_df is None or congestion_df is None:
 
 
 # Main content
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📈 Overview", 
+tab1, tab2, tab3 = st.tabs([
     "🗺️ Geographic Analysis", 
     "⏰ Temporal Patterns", 
-    "🚦 Congestion Analysis",
     "📊 Model Insights",
-    "🛣️ Route Analysis"
 ])
 
 # ============================================================================
-# TAB 1: OVERVIEW
+# TAB 1: GEOGRAPHIC ANALYSIS
 # ============================================================================
 with tab1:
-    st.header("Overview Statistics")
-    
-    # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Records", f"{len(traffic_df):,}")
-    
-    with col2:
-        avg_speed = traffic_df['speed'].mean()
-        st.metric("Avg Speed", f"{avg_speed:.1f} km/h")
-    
-    with col3:
-        if 'near_congestion' in traffic_df.columns:
-            congestion_pct = (traffic_df['near_congestion'].sum() / len(traffic_df)) * 100
-            st.metric("Near Congestion", f"{congestion_pct:.1f}%")
-        else:
-            st.metric("Near Congestion", "N/A")
-    
-    #with col4:
-        #slow_traffic = (traffic_df['speed'] < speed_threshold).sum()
-        #slow_pct = (slow_traffic / len(traffic_df)) * 100
-        #st.metric(f"Speed < {speed_threshold} km/h", f"{slow_pct:.1f}%")
-    
-    with col4:
-        unique_vehicles = traffic_df['VehicleID'].nunique() if 'VehicleID' in traffic_df.columns else 'N/A'
-        st.metric("Unique Vehicles", f"{unique_vehicles:,}" if isinstance(unique_vehicles, int) else unique_vehicles)
-    
-    st.markdown("---")
-    
-    # Speed distribution
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Speed Distribution")
-        fig = px.histogram(
-            traffic_df, 
-            x='speed', 
-            nbins=50,
-            title="Traffic Speed Distribution",
-            labels={'speed': 'Speed (km/h)', 'count': 'Frequency'},
-            color_discrete_sequence=['#1f77b4']
-        )
-        #fig.add_vline(x=speed_threshold, line_dash="dash", line_color="red", 
-                    #annotation_text=f"Threshold: {speed_threshold} km/h")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("Speed Statistics by Hour")
-        if 'hour' in traffic_df.columns:
-            hourly_stats = traffic_df.groupby('hour')['speed'].agg(['mean', 'median', 'std']).reset_index()
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=hourly_stats['hour'], y=hourly_stats['mean'], 
-                                    mode='lines+markers', name='Mean', line=dict(color='blue')))
-            fig.add_trace(go.Scatter(x=hourly_stats['hour'], y=hourly_stats['median'], 
-                                    mode='lines+markers', name='Median', line=dict(color='green')))
-            fig.update_layout(
-                title="Average Speed by Hour",
-                xaxis_title="Hour of Day",
-                yaxis_title="Speed (km/h)",
-                hovermode='x unified'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-# ============================================================================
-# TAB 2: GEOGRAPHIC ANALYSIS
-# ============================================================================
-with tab2:
     st.header("Geographic Analysis")
     
     col1, col2 = st.columns([2, 1])
@@ -384,9 +310,9 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
-# TAB 3: TEMPORAL PATTERNS
+# TAB 2: TEMPORAL PATTERNS
 # ============================================================================
-with tab3:
+with tab2:
     st.header("Temporal Traffic Patterns")
     
     col1, col2 = st.columns(2)
@@ -465,60 +391,9 @@ with tab3:
             )
 
 # ============================================================================
-# TAB 4: CONGESTION ANALYSIS
+# TAB 3: MODEL INSIGHTS
 # ============================================================================
-with tab4:
-    st.header("Congestion Zone Analysis")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Congestion Severity Distribution")
-        severity_counts = congestion_df['severity'].value_counts()
-        fig = px.pie(
-            values=severity_counts.values,
-            names=severity_counts.index,
-            title="Distribution of Congestion Severity",
-            color=severity_counts.index,
-            color_discrete_map={'Critical': 'red', 'High': 'orange', 'Medium': 'yellow', 'Low': 'green'}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("Congestion Zone Sizes")
-        fig = px.bar(
-            congestion_df.sort_values('size', ascending=False).head(10),
-            x='zone_id',
-            y='size',
-            color='severity',
-            title="Top 10 Largest Congestion Zones",
-            labels={'zone_id': 'Zone ID', 'size': 'Zone Size'},
-            color_discrete_map={'Critical': 'red', 'High': 'orange', 'Medium': 'yellow', 'Low': 'green'}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Speed comparison near congestion
-    if 'near_congestion' in traffic_df.columns:
-        st.subheader("Speed Comparison: Near vs Far from Congestion Zones")
-        
-        near = traffic_df[traffic_df['near_congestion'] == 1]['speed']
-        far = traffic_df[traffic_df['near_congestion'] == 0]['speed']
-        
-        fig = go.Figure()
-        fig.add_trace(go.Box(y=near, name='Near Congestion', marker_color='red'))
-        fig.add_trace(go.Box(y=far, name='Far from Congestion', marker_color='green'))
-        fig.update_layout(
-            title="Speed Distribution by Proximity to Congestion Zones",
-            yaxis_title="Speed (km/h)"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-# ============================================================================
-# TAB 5: MODEL INSIGHTS
-# ============================================================================
-with tab5:
+with tab3:
     st.header("Model Insights & Features")
     
     # Feature correlation
@@ -562,157 +437,6 @@ with tab5:
         st.metric("Duplicate Records", f"{traffic_df.duplicated().sum()}")
         if 'speed' in traffic_df.columns:
             st.metric("Speed Outliers (>120 km/h)", f"{(traffic_df['speed'] > 120).sum()}")
-
-# ============================================================================
-# TAB 6: ROUTE ANALYSIS
-# ============================================================================
-with tab6:
-    st.header("Route-Level Analysis")
-    
-    # File uploader for route data
-    st.subheader("📁 Upload Route Data")
-    route_file = st.file_uploader("Upload Route Data CSV", type=['csv'], key='route_uploader')
-    
-    if route_file is not None:
-        route_df = pd.read_csv(route_file)
-        
-        st.subheader("Route-by-Route Details")
-        
-        required_cols = ['ref', 'name', 'num_stops', 'total_distance_km', 
-                         'avg_predicted_speed_kmh', 'total_predicted_travel_time_min']
-        missing_cols = [col for col in required_cols if col not in route_df.columns]
-        
-        if missing_cols:
-            st.warning(f"⚠️ Missing columns: {', '.join(missing_cols)}")
-            st.info("""
-            **Expected columns:**
-            - `ref`: Route reference number or ID  
-            - `name`: Route name  
-            - `num_stops`: Number of stops  
-            - `total_distance_km`: Total route distance (km)  
-            - `avg_predicted_speed_kmh`: Average predicted speed (km/h)  
-            - `total_predicted_travel_time_min`: Total travel time (minutes)
-            """)
-        else:
-            # Format dataframe for display
-            display_df = route_df.rename(columns={
-                'ref': 'Route Ref',
-                'name': 'Route Name',
-                'num_stops': 'Stops',
-                'total_distance_km': 'Distance (km)',
-                'avg_predicted_speed_kmh': 'Avg Speed (km/h)',
-                'total_predicted_travel_time_min': 'Travel Time (min)'
-            })
-            
-            def style_route_table(df):
-                styled = df.style.format({
-                    'Distance (km)': '{:.2f}',
-                    'Avg Speed (km/h)': '{:.2f}',
-                    'Travel Time (min)': '{:.2f}'
-                })
-                
-                styled = styled.background_gradient(
-                    subset=['Avg Speed (km/h)'],
-                    cmap='RdYlGn',
-                    vmin=0,
-                    vmax=df['Avg Speed (km/h)'].max()
-                )
-                
-                styled = styled.background_gradient(
-                    subset=['Travel Time (min)'],
-                    cmap='RdYlGn_r',
-                    vmin=0,
-                    vmax=df['Travel Time (min)'].max()
-                )
-                return styled
-            
-            st.dataframe(style_route_table(display_df), use_container_width=True, height=400)
-            
-            # Summary
-            st.markdown("---")
-            st.subheader("Overall Summary")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            total_distance = route_df['total_distance_km'].sum()
-            total_time = route_df['total_predicted_travel_time_min'].sum()
-            avg_speed = route_df['avg_predicted_speed_kmh'].mean()
-            total_routes = len(route_df)
-            
-            with col1:
-                st.metric("Total Distance", f"{total_distance:.2f} km")
-            with col2:
-                st.metric("Total Travel Time", f"{total_time:.2f} min")
-            with col3:
-                st.metric("Average Speed", f"{avg_speed:.2f} km/h")
-            with col4:
-                st.metric("Number of Routes", f"{total_routes}")
-            
-            # Visualizations
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Average Speed by Route")
-                fig = px.bar(
-                    route_df,
-                    x='ref',
-                    y='avg_predicted_speed_kmh',
-                    title="Average Predicted Speed per Route",
-                    labels={'ref': 'Route', 'avg_predicted_speed_kmh': 'Speed (km/h)'},
-                    color='avg_predicted_speed_kmh',
-                    color_continuous_scale='RdYlGn'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                st.subheader("Total Travel Time by Route")
-                fig = px.bar(
-                    route_df,
-                    x='ref',
-                    y='total_predicted_travel_time_min',
-                    title="Total Travel Time per Route",
-                    labels={'ref': 'Route', 'total_predicted_travel_time_min': 'Time (min)'},
-                    color='total_predicted_travel_time_min',
-                    color_continuous_scale='RdYlGn_r'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Performance analysis
-            st.markdown("---")
-            st.subheader("Performance Analysis")
-            
-            slowest = route_df.loc[route_df['avg_predicted_speed_kmh'].idxmin()]
-            longest = route_df.loc[route_df['total_predicted_travel_time_min'].idxmax()]
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.warning(f"""
-                **⚠️ Slowest Route**
-                - Route: {slowest['ref']} ({slowest['name']})
-                - Speed: {slowest['avg_predicted_speed_kmh']:.2f} km/h
-                - Distance: {slowest['total_distance_km']:.2f} km
-                """)
-            
-            with col2:
-                st.error(f"""
-                **🚨 Longest Travel Time**
-                - Route: {longest['ref']} ({longest['name']})
-                - Time: {longest['total_predicted_travel_time_min']:.2f} min
-                - Distance: {longest['total_distance_km']:.2f} km
-                """)
-    else:
-        st.info("""
-        📤 **Upload a route-level CSV file to view analysis**
-        
-        **Expected CSV format:**
-        ```
-        ref,name,num_stops,total_distance_km,avg_predicted_speed_kmh,total_predicted_travel_time_min
-        1,Route A,12,22.50,35.60,38.00
-        2,Route B,8,18.90,42.00,27.00
-        ...
-        ```
-        """)
 
 
 # Footer
