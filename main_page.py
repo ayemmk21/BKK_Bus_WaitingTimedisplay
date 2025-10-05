@@ -1,5 +1,3 @@
-#first piece of code
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,12 +10,12 @@ import os
 
 # Page configuration
 st.set_page_config(
-    page_title="Bangkok Traffic Analysis",
+    page_title="Traffic Analysis",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("Traffic Analysis Dashboard")
+st.title("Bangkok Traffic Analysis Dashboard")
 st.sidebar.success("Select a page above.")
 
 # Hugging Face dataset URLs
