@@ -1,0 +1,7 @@
+streamlit
+pandas
+numpy
+plotly
+huggingface_hub
+folium
+streamlit-folium
